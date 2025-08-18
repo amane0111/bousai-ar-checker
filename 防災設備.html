@@ -2,87 +2,103 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>最終診断用 ARプロトタイプ</title>
+    <title>Teachable Machine ARプロトタイプ</title>
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; }
-        #container { position: relative; margin-top: 20px; }
-        #result-image { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); max-width: 80%; border: 5px solid gold; border-radius: 10px; display: none; }
-        canvas { max-width: 500px; border-radius: 10px; }
+        /* ここは見た目を整えるためのCSSです */
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #webcam-container {
+            position: relative;
+            margin-top: 20px;
+        }
+        #result-image {
+            /* 結果の画像をカメラ映像の上に重ねる */
+            position: absolute;
+            bottom: 20px; /* 下から20pxの位置に */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            max-width: 400px;
+            display: none; /* 最初は隠しておく */
+            border: 5px solid gold;
+            border-radius: 10px;
+        }
+        video {
+            width: 100%;
+            max-width: 500px;
+            border-radius: 10px;
+        }
     </style>
 </head>
 <body>
+
     <h1>防災設備ARチェッカー</h1>
-    <div id="container"></div>
+    <div id="webcam-container"></div>
+<img id="result-image" src="" alt="認識結果">
 
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachable-machine-image.min.js"></script>
+<script>
+const URL = "https://teachablemachine.withgoogle.com/models/Yme8xFnP1/";
 
-    <script type="text/javascript">
-        console.log("プログラム開始");
+const instructionImages = {
+    "排煙スイッチ": "https://i.imgur.com/mSjdLSd.png",
+    "消火器": "https://i.imgur.com/kdjCSDl.png"
+};
 
-        const URL = "https://teachablemachine.withgoogle.com/models/Yme8xFnP1/";
-        const instructionImages = {
-            "排煙スイッチ": "https://i.imgur.com/k6eFRoV.png",
-            "消火器": "https://i.imgur.com/pB2p3X2.png"
-        };
+let model, webcam, maxPredictions;
+const resultImage = document.getElementById('result-image');
 
-        let model, webcam, container, maxPredictions;
-        const resultImage = document.createElement('img');
-        resultImage.id = 'result-image';
+async function init() {
+    const modelURL = URL + "model.json";
+    const metadataURL = URL + "metadata.json";
 
-        async function init() {
-            console.log("init関数 開始");
-            const modelURL = URL + "model.json";
-            const metadataURL = URL + "metadata.json";
+    model = await tmImage.load(modelURL, metadataURL);
+    maxPredictions = model.getTotalClasses();
 
-            try {
-                model = await tmImage.load(modelURL, metadataURL);
-                console.log("AIモデルの読み込み完了");
-                maxPredictions = model.getTotalClasses();
+    const flip = true;
+    webcam = new tmImage.Webcam(500, 500, flip);
+    await webcam.setup();
+    await webcam.play();
+    window.requestAnimationFrame(loop);
 
-                webcam = new tmImage.Webcam(400, 400, true);
-                await webcam.setup();
-                console.log("ウェブカメラの設定完了");
-                await webcam.play();
-                console.log("ウェブカメラの再生開始");
+    document.getElementById("webcam-container").appendChild(webcam.canvas);
+}
 
-                window.requestAnimationFrame(loop);
+async function loop() {
+    webcam.update();
+    await predict();
+    window.requestAnimationFrame(loop);
+}
 
-                container = document.getElementById("container");
-                container.appendChild(webcam.canvas);
-                container.appendChild(resultImage);
-                console.log("カメラ映像をページに追加完了");
+async function predict() {
+    const prediction = await model.predict(webcam.canvas);
+    let highestProbability = 0;
+    let bestClassName = "";
 
-            } catch (e) {
-                console.error("エラーが発生しました:", e);
-            }
+    for (let i = 0; i < maxPredictions; i++) {
+        if (prediction[i].probability > highestProbability) {
+            highestProbability = prediction[i].probability;
+            bestClassName = prediction[i].className;
         }
+    }
 
-        async function loop() {
-            webcam.update();
-            await predict();
-            window.requestAnimationFrame(loop);
+    if (highestProbability > 0.9) {
+        if (instructionImages[bestClassName]) {
+            resultImage.src = instructionImages[bestClassName];
+            resultImage.style.display = 'block';
+        } else {
+            resultImage.style.display = 'none';
         }
+    } else {
+        resultImage.style.display = 'none';
+    }
+}
 
-        async function predict() {
-            const prediction = await model.predict(webcam.canvas);
-            let bestPrediction = { className: "", probability: 0 };
-            for (let i = 0; i < maxPredictions; i++) {
-                if (prediction[i].probability > bestPrediction.probability) {
-                    bestPrediction = prediction[i];
-                }
-            }
+init();
+</script>
 
-            if (bestPrediction.probability > 0.95 && instructionImages[bestPrediction.className]) {
-                resultImage.src = instructionImages[bestPrediction.className];
-                resultImage.style.display = 'block';
-            } else {
-                resultImage.style.display = 'none';
-            }
-        }
-
-        console.log("init関数を呼び出します");
-        init();
-    </script>
 </body>
 </html>
